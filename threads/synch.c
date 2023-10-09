@@ -212,6 +212,14 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
+  if (thread_mlfqs)
+  {
+    sema_down (&lock->semaphore);
+    lock->holder = thread_current ();
+    
+    return;
+  }
+
   struct thread *cur = thread_current();
 
   /* if lock is already acquired, donate priority */
@@ -267,7 +275,7 @@ lock_release (struct lock *lock)
   /* If holder has dnoation elem, remove current thread in
      donation list and donate the highest priority in 
      donation list to holder*/
-  if (!list_empty(&cur->donation_list))
+  if (!thread_mlfqs && !list_empty(&cur->donation_list))
   {
     struct list_elem *e; 
     struct thread *t; 

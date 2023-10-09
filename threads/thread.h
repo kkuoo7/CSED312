@@ -91,9 +91,10 @@ struct thread
    int priority;                       /* Priority. */
    int original_priority;              /* original priority */
 
-   struct list_elem allelem;           /* List element for all threads list. */
+   int nice; 
+   int recent_cpu;
 
-   int64_t ticks_for_wakeup;           /* ticks for wakeup */   
+   struct list_elem allelem;           /* List element for all threads list. */
 
    struct lock *lock_wait;          /* lock trying to acquire */
    struct list donation_list;         /* donation list */
@@ -149,12 +150,20 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 /* Custom function in Lab1*/
-void thread_wakeup(void);
+void thread_wakeup(int64_t ticks);
 void thread_sleep(int64_t ticks);
+bool compare_wakeup_ticks(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 bool compare_priority_desc(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 bool compare_ticks_asec(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 void thread_preempt(void);
 void thread_donate_priority(struct thread *holder, int depth);
 void thread_reflect_donation_list(void);
+
+void increase_recent_cpu(void);
+void MLFQS_priority_update(void);
+void calc_recent_cpu(struct thread *t);
+void calc_load_avg(void);
+void recent_cpu_update(void);
+
 
 #endif /* threads/thread.h */
