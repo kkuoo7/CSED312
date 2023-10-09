@@ -87,6 +87,7 @@ struct thread
    enum thread_status status;          /* Thread state. */
    char name[16];                      /* Name (for debugging purposes). */
    uint8_t *stack;                     /* Saved stack pointer. */
+   int64_t wake_up_time;               /* wakeup time */
    int priority;                       /* Priority. */
    int original_priority;              /* original priority */
 
@@ -148,7 +149,7 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 /* Custom function in Lab1*/
-void thread_wakeup(int64_t ticks);
+void thread_wakeup(void);
 void thread_sleep(int64_t ticks);
 bool compare_priority_desc(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 bool compare_ticks_asec(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);

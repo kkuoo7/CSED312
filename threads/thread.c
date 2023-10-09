@@ -30,6 +30,10 @@ static struct list ready_list;
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
 
+
+/* sleeping_list 선언*/
+static struct list sleeping_list; 
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -94,6 +98,8 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+
+  list_init(&sleeping_list); // sleeping_list 초기화
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -244,6 +250,40 @@ thread_unblock (struct thread *t)
   list_insert_ordered(&ready_list, &t->elem, compare_priority_desc, NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
+}
+
+void
+thread_sleep(int64_t wakeup_time)
+{
+  enum intr_level old_level = intr_disable(); //인터럽트 끄기
+  
+  struct thread *cur = thread_current();
+  ASSERT (cur != idle_thread); //idle 쓰레드가 아닌걸 확인
+
+  cur->wake_up_time = wakeup_time; //현재 쓰레드의 wakeup time 설정
+  list_push_back(&sleeping_list, &cur->elem); //sleeping list에 현재 쓰레드 추가
+  thread_block(); //현재 쓰레드 블락
+
+  intr_set_level(old_level); //인터럽트 켜기
+}
+
+void 
+thread_wakeup()
+{
+  int64_t curr_time = timer_ticks();
+  struct thread *t;
+
+  for(struct list_elem *e = list_begin(&sleeping_list); e != list_end(&sleeping_list);)
+  {
+    t = list_entry(e, struct thread, elem);
+
+    if(t->wake_up_time <= curr_time){ //wakeup time이 ticks보다 작은 쓰레드를 찾으면
+      e = list_remove(e); //sleeping list에서 제거
+      thread_unblock(t); //깨우기
+    }
+    else 
+      e = list_next(e); //아니면 다음 쓰레드로
+  }
 }
 
 void

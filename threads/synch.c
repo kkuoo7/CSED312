@@ -271,7 +271,6 @@ lock_release (struct lock *lock)
   {
     struct list_elem *e; 
     struct thread *t; 
-    struct thread *max; 
 
     for (e = list_begin(&cur->donation_list); e != list_end(&cur->donation_list);)
     {
