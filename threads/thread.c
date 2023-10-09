@@ -20,6 +20,8 @@
    of thread.h for details. */
 #define THREAD_MAGIC 0xcd6abf4b
 
+#define MAX_DEPTH 8
+
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
@@ -350,10 +352,12 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
+  thread_current ()->original_priority = new_priority;
 
+
+  thread_reflect_donation_list();
   /* After change the priority of current thread, Check whether 
-    it has lower prirority than ready_list */
+  it has lower prirority than ready_list */
   thread_preempt();
 }
 
@@ -367,17 +371,30 @@ thread_get_priority (void)
 void
 thread_donate_priority(struct thread *holder, int depth)
 {
-  if (depth >= 8)
-    return; 
-  
+  depth = 0; 
+  struct thread *trying_thread = thread_current();
+
+  for(; trying_thread->lock_wait != NULL && depth < MAX_DEPTH; depth++, 
+    trying_thread = trying_thread->lock_wait->holder)
+  {
+    if(trying_thread->priority > trying_thread->lock_wait->holder->priority)
+      trying_thread->lock_wait->holder->priority = trying_thread->priority;
+  }
+}
+
+void thread_reflect_donation_list(void)
+{
   struct thread *cur = thread_current();
 
-  if(holder->priority < cur->priority)
-  {
-    holder->priority = cur->priority;
+  cur->priority = cur->original_priority;
 
-    if(holder->lock_wait != NULL)
-      thread_donate_priority(holder->lock_wait->holder, depth + 1);
+  if(!list_empty(&cur->donation_list)) 
+  {
+    struct thread *max = list_entry(list_max(&cur->donation_list, compare_priority_desc, NULL), 
+                                      struct thread, donation_elem);
+
+    if (max->priority > cur->priority)
+      cur->priority = max->priority;
   }
 }
 

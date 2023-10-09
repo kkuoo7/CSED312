@@ -154,5 +154,6 @@ bool compare_priority_desc(const struct list_elem *a, const struct list_elem *b,
 bool compare_ticks_asec(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 void thread_preempt(void);
 void thread_donate_priority(struct thread *holder, int depth);
+void thread_reflect_donation_list(void);
 
 #endif /* threads/thread.h */
