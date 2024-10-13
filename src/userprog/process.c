@@ -21,14 +21,88 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
+//added functions
+void
+pars_filename (char *cmd)
+{
+  char *save_ptr;
+  cmd = strtok_r (cmd, " ", &save_ptr);
+}
+int
+pars_arguments (char *cmd, char **argv)
+{
+  char *token, *save_ptr;
+
+  int argc = 0;
+
+  for (token = strtok_r (cmd, " ", &save_ptr); token != NULL;
+  token = strtok_r (NULL, " ", &save_ptr), argc++)
+  {
+    argv[argc] = token;
+  }
+
+  return argc;
+}
+
+void
+init_stack_arg (char **argv, int argc, void **esp)
+{
+  /* Push ARGV[i][...] */
+  int argv_len, i, len;
+  for (i = argc - 1, argv_len = 0; i >= 0; i--)
+  {
+    len = strlen (argv[i]);
+    *esp -= len + 1;
+    argv_len += len + 1;
+    strlcpy (*esp, argv[i], len + 1);
+    argv[i] = *esp;
+  }
+
+  /* Align stack. */
+  if (argv_len % 4)
+    *esp -= 4 - (argv_len % 4);
+
+  /* Push null. */
+  *esp -= 4;
+  **(uint32_t **)esp = 0;
+
+  /* Push ARGV[i]. */
+  for(i = argc - 1; i >= 0; i--)
+  {
+    *esp -= 4;
+    **(uint32_t **)esp = argv[i];
+  }
+
+  /* Push ARGV. */
+  *esp -= 4;
+  **(uint32_t **)esp = *esp + 4;
+
+  /* Push ARGC. */
+  *esp -= 4;
+  **(uint32_t **)esp = argc;
+
+  /* Push return address. */
+  *esp -= 4;
+  **(uint32_t **)esp = 0;
+}
+
+//added functions
+
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
+
+
+
 tid_t
 process_execute (const char *file_name) 
 {
+  /*
   char *fn_copy;
+  tid_t tid;
+  */
+  char *fn_copy, *parsed_fn;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
@@ -37,13 +111,42 @@ process_execute (const char *file_name)
   if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
-
+  
   /* Create a new thread to execute FILE_NAME. */
+  /*
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
+  else{
+    sema_down(&thread_current()->load_sema);
+  }
+
+
+  palloc_free_page (fn_copy);
+
+  return tid;*/
+  parsed_fn = palloc_get_page (0);
+  if (parsed_fn == NULL) {
+    return TID_ERROR;
+  }
+
+  strlcpy (parsed_fn, file_name, PGSIZE);
+
+  pars_filename (parsed_fn);
+
+  tid = thread_create (parsed_fn, PRI_DEFAULT, start_process, fn_copy);
+  if (tid == TID_ERROR) {
+    palloc_free_page (fn_copy); 
+  } else {
+    sema_down (&(get_child_pcb (tid)->sema_load));
+  }
+  
+  palloc_free_page (parsed_fn);
+
   return tid;
 }
+
+#ifdef USERPROG
 
 /* A thread function that loads a user process and starts it
    running. */
@@ -61,8 +164,20 @@ start_process (void *file_name_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
 
+  //parse arguments
+  char **argv = palloc_get_page(0);
+  int argc = pars_arguments(file_name, argv);
+  success = load (argv[0], &if_.eip, &if_.esp);
+  if (success)
+    init_stack_arg (argv, argc, &if_.esp);
+  palloc_free_page (argv);
+
+
   /* If load failed, quit. */
   palloc_free_page (file_name);
+
+  sema_up (&(thread_current ()->pcb->sema_load)); // 1
+
   if (!success) 
     thread_exit ();
 
@@ -86,9 +201,26 @@ start_process (void *file_name_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
-  return -1;
+  struct thread *child = get_child_thread (child_tid);
+  int exit_code;
+
+  if (child == NULL)
+    return -1;
+  
+  if (child->pcb == NULL || child->pcb->exit_code == -2 || !child->pcb->is_loaded) {
+    return -1;
+  }
+  
+  sema_down (&(child->pcb->sema_wait)); // sema down to wait on child process
+  
+  exit_code = child->pcb->exit_code; // child has exited
+  list_remove (&(child->elem_child_process));
+  palloc_free_page (child->pcb);
+  palloc_free_page (child);
+
+  return exit_code;
 }
 
 /* Free the current process's resources. */
@@ -97,6 +229,13 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
+
+  for (int i = cur->pcb->fd_count - 1; i > 1; i--)
+  {
+    sys_close (i);
+  }
+
+  palloc_free_page (cur->pcb->fd_table);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -114,6 +253,11 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+
+  //child process is about to exit
+  cur->pcb->is_exited = true;
+  sema_up (&(cur->pcb->sema_wait)); 
+  // sema up to notifiy parent process
 }
 
 /* Sets up the CPU for running user code in the current
@@ -463,3 +607,5 @@ install_page (void *upage, void *kpage, bool writable)
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
+
+#endif

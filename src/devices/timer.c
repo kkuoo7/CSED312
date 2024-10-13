@@ -89,11 +89,9 @@ timer_elapsed (int64_t then)
 void
 timer_sleep (int64_t ticks) 
 {
-  int64_t start = timer_ticks ();
+  int64_t wakeup_time = ticks + timer_ticks (); //현재 시간 + ticks = 일어나야 하는 시간 계산
 
-  ASSERT (intr_get_level () == INTR_ON);
-  while (timer_elapsed (start) < ticks) 
-    thread_yield ();
+  thread_sleep(wakeup_time); //현재 쓰레드를 wakeup time 까지 재움
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -172,6 +170,24 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
+
+  if (thread_mlfqs) 
+  {
+    increase_recent_cpu();
+  }
+
+  if (thread_mlfqs && (ticks % TIMER_FREQ == 0))
+  { //1초마다
+      calc_load_avg(); //load_avg 계산
+      recent_cpu_update(); //recent_cpu 업데이트
+  }
+
+  if (thread_mlfqs && (ticks % 4 == 0))
+  { //4틱마다
+      MLFQS_priority_update(); //priority 업데이트
+  }
+
+  thread_wakeup(ticks); 
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
