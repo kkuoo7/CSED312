@@ -69,7 +69,7 @@ syscall_handler (struct intr_frame *f)
 
     case SYS_WAIT:
       get_argument (f->esp, arg, 1);
-      f->eax = sys_wait ((tid_t) arg);
+      f->eax = sys_wait ((tid_t) arg[0]);
       break;
 
     case SYS_CREATE:
@@ -191,8 +191,8 @@ sys_open (const char *file)
     return -1;
   }
 
-  t->pcb->run_file = _file;
-  file_deny_write(_file);
+  // t->pcb->run_file = _file;
+  // file_deny_write(_file);
 
   lock_release(&filesys_lock);
   return fd;
@@ -265,7 +265,6 @@ sys_write (int fd, const void *buffer, unsigned size)
       lock_release(&filesys_lock);
       return -1; 
     }
-
     written_bytes = file_write(f, buffer, size);
   }
 

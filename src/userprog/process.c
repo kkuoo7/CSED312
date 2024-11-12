@@ -244,8 +244,7 @@ process_wait (tid_t child_tid)
     return -1;
 
   //printf("process_wait start!\n\n");
-
-  child->pcb->waited = true;
+  child->pcb->waited += 1;
 
   //printf("process_wait sleep!\n\n");
   sema_down (&(child->pcb->sema_wait)); // sema down to wait on child process
@@ -253,7 +252,7 @@ process_wait (tid_t child_tid)
   
   exit_code = child->pcb->exit_code; // child가 종료됨을 알림
 
-  if (child->pcb == NULL || child->pcb->exit_code == -1 || !child->pcb->is_exited || child->pcb->parent_process != cur || child->pcb->waited)
+  if (!child->pcb->is_exited || child->parent_process != cur || child->pcb->waited != 1)
     return -1;
 
   // remove_child_process(child_tid); 
@@ -287,6 +286,8 @@ process_exit (void)
       cur->pcb->fd_table = NULL;
   }
 
+  file_close(cur->pcb->run_file);
+
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
@@ -308,7 +309,7 @@ process_exit (void)
   sema_up (&(cur->pcb->sema_wait));  // sema up to notifiy parent process
 
   /* 만약 부모가 먼저 종료되었으면 실행 정보를 해제*/
-    if (cur->parent_process == NULL && cur->pcb != NULL) 
+    if (cur->parent_process == NULL && cur != NULL) 
     {
         palloc_free_page(cur->pcb);
         cur->pcb = NULL;
@@ -439,8 +440,8 @@ process_close_file (int fd)
 
   if (cur->pcb->fd_table[fd] != NULL && fd >= 2 && fd <= FD_MAX)
   {
-    if (cur->pcb->run_file == cur->pcb->fd_table[fd])
-      cur->pcb->run_file = NULL;
+    // if (cur->pcb->run_file == cur->pcb->fd_table[fd])
+    //   cur->pcb->run_file = NULL;
 
     file_close(cur->pcb->fd_table[fd]); // 파일 디스크립터에 해당하는 파일을 닫음
     cur->pcb->fd_table[fd] = NULL;
@@ -543,6 +544,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   if (file == NULL) 
   {
     printf ("load: %s: open failed\n", file_name);
+    lock_release(&filesys_lock);
     goto done; 
   }
 
@@ -628,13 +630,11 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
+  
   success = true;
 
  done:
   /* We arrive here whether the load is successful or not. */
-  file_close (file);
-  t->pcb->run_file = NULL;
-
   return success;
 }
 

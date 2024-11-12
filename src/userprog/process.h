@@ -15,7 +15,7 @@ struct pcb {
   struct semaphore sema_wait;     // Semaphore for parent to wait on child
 
   int exit_code;                  // Exit status of the process
-  bool waited; 
+  int waited; 
   
   struct file **fd_table;         // File descriptor table for open files
   int next_fd;                    // Index for file descriptor 

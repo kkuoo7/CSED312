@@ -231,7 +231,7 @@ thread_create (const char *name, int priority,
   t->pcb->is_exited = false;
   t->pcb->is_loaded = false;
   t->pcb->exit_code = -1;
-  t->pcb->waited = false;
+  t->pcb->waited = 0;
 
   t->pcb->fd_count = 2;
   t->pcb->run_file = NULL;
