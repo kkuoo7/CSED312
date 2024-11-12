@@ -1,0 +1,10 @@
+{
+    "files.associations": {
+        "vaddr.h": "c",
+        "file.h": "c",
+        "filesys.h": "c",
+        "cstdlib": "c",
+        "interrupt.h": "c",
+        "*.inc": "c"
+    }
+}

@@ -82,19 +82,6 @@ typedef int tid_t;
    ready state is on the run queue, whereas only a thread in the
    blocked state is on a semaphore wait list. */
 
-struct pcb
-  {
-    int exit_code;
-    bool is_exited;
-    bool is_loaded;
-
-    struct file **fd_table;
-    int fd_count;
-    struct file *file_ex;
-
-    struct semaphore sema_wait;
-    struct semaphore sema_load;
-  };
 
 struct thread
   {
@@ -111,13 +98,11 @@ struct thread
    int recent_cpu;
 
    struct list_elem allelem;           /* List element for all threads list. */
+   struct list_elem elem;              /* List element. */
 
    struct lock *lock_wait;          /* lock trying to acquire */
    struct list donation_list;         /* donation list */
    struct list_elem donation_elem;   /* donation list element */
-
-   /* Shared between thread.c and synch.c. */
-   struct list_elem elem;              /* List element. */
 
 
 #ifdef USERPROG
@@ -125,9 +110,9 @@ struct thread
     uint32_t *pagedir;                  /* Page directory. */
     struct pcb *pcb; /*PCB*/
 
-    struct thread *parent_process;
-    struct list list_child_process;
-    struct list_elem elem_child_process;
+   struct thread *parent_process;
+   struct list children;           // List of child processes
+   struct list_elem child_elem;    // Element for child list in the parent process
 #endif
 
     /* Owned by thread.c. */
@@ -178,6 +163,8 @@ bool compare_priority_desc(const struct list_elem *a, const struct list_elem *b,
 bool compare_ticks_asec(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 void thread_preempt(void);
 void thread_donate_priority(struct thread *holder, int depth);
+void thread_donate_priority_test(void);
+void thread_remove_donation_elem(struct thread *releasing_thread, struct lock *lock);
 void thread_reflect_donation_list(void);
 
 void increase_recent_cpu(void);
@@ -186,8 +173,7 @@ void calc_recent_cpu(struct thread *t);
 void calc_load_avg(void);
 void recent_cpu_update(void);
 
-struct pcb *get_child_pcb (tid_t child_tid);
-struct thread *get_child_thread (tid_t child_tid);
+struct thread* get_thread_by_tid(tid_t tid);
 
 
 #endif /* threads/thread.h */

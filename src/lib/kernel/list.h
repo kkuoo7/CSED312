@@ -161,7 +161,10 @@ void list_reverse (struct list *);
 
 /* Compares the value of two list elements A and B, given
    auxiliary data AUX.  Returns true if A is less than B, or
-   false if A is greater than or equal to B. */
+   false if A is greater than or equal to B. 
+   'list_less_func' defines a new function type that returns a bool
+   and takes (const struct list_elem *a, const struct list_elem *b, void *aux) as parameters.
+   */
 typedef bool list_less_func (const struct list_elem *a,
                              const struct list_elem *b,
                              void *aux);

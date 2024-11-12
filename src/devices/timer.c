@@ -89,9 +89,11 @@ timer_elapsed (int64_t then)
 void
 timer_sleep (int64_t ticks) 
 {
-  int64_t wakeup_time = ticks + timer_ticks (); //현재 시간 + ticks = 일어나야 하는 시간 계산
+  /* The wake-up time is equal to the current ticks plus the value of the parameter 'ticks'.*/
+  int64_t wakeup_time = ticks + timer_ticks (); 
 
-  thread_sleep(wakeup_time); //현재 쓰레드를 wakeup time 까지 재움
+  /**/
+  thread_sleep(wakeup_time); 
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -176,17 +178,18 @@ timer_interrupt (struct intr_frame *args UNUSED)
     increase_recent_cpu();
   }
 
-  if (thread_mlfqs && (ticks % TIMER_FREQ == 0))
-  { //1초마다
+  if (thread_mlfqs && (ticks % TIMER_FREQ == 0)) // Update the priority of all threads every 'second' (100 ticks)
+  { 
       calc_load_avg(); //load_avg 계산
       recent_cpu_update(); //recent_cpu 업데이트
   }
 
-  if (thread_mlfqs && (ticks % 4 == 0))
-  { //4틱마다
-      MLFQS_priority_update(); //priority 업데이트
+  if (thread_mlfqs && (ticks % 4 == 0)) // Update the current thread's priority every 4 ticks
+  { 
+      MLFQS_priority_update(); 
   }
 
+  /*For task 1. alarm clock*/
   thread_wakeup(ticks); 
 }
 

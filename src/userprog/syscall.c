@@ -3,135 +3,145 @@
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/vaddr.h"
+#include "process.h"
+#include "filesys/filesys.h"
+#include "filesys/file.h"
 
 static void syscall_handler (struct intr_frame *);
 
 //added
-struct semaphore rw_mutex, mutex;
-int read_count;
+// struct semaphore rw_mutex, mutex;
+// int read_count;
 
-#define PHYS_BASE 0xc0000000
-#define STACK_BOTTOM 0x8048000
+#define USER_START_ADDRESS 0x8048000
 
-bool validate_addr (void *addr)
+void check_address (void *addr)
 {
-  if (addr >= STACK_BOTTOM && addr < PHYS_BASE && addr != 0)
-    return true;
+  if (addr >= USER_START_ADDRESS && is_user_vaddr(addr))
+    return;
 
-  return false;
+  sys_exit(-1);
 }
+
 
 void 
 get_argument (int *esp, int *arg, int count)
 {
-  int i;
-  for (i = 0; i < count; i++)
+  for (int i = 0; i < count; i++)
   {
-    if (!validate_addr(esp + 1 + i)) { sys_exit(-1); }
-    arg[i] = *(esp + 1 + i);
+    check_address(esp + i + 1);
+    arg[i] = *(esp + i + 1);
   }
 }
-//added
 
 void
 syscall_init (void) 
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+  lock_init(&filesys_lock);
 }
 
 static void
-syscall_handler (struct intr_frame *f UNUSED) 
+syscall_handler (struct intr_frame *f) 
 {
-  if (!validate_addr (f->esp))
-  {
-    sys_exit (-1);
-  }
-  
-  //thread_current()->esp = f->esp;
-  
-  int argv[3];
+  check_address(f->esp);
 
-  switch (*(int *)f->esp)
+  int arg[3];
+  int syscall_number = *(int *)(f->esp);
+
+  switch (syscall_number)
   {
     case SYS_HALT:
       shutdown_power_off ();
       break;
 
     case SYS_EXIT:
-      get_argument (f->esp, &argv[0], 1);
-      sys_exit (argv[0]);
+      get_argument (f->esp, arg, 1);
+      sys_exit (arg[0]);
       break;
-    case SYS_EXEC:
-      get_argument (f->esp, &argv[0], 1);
-      f->eax = sys_exec (argv[0]);
-      break;
-    case SYS_WAIT:
-      get_argument (f->esp, &argv[0], 1);
-      f->eax = sys_wait (argv[0]);
-      break;
-    case SYS_CREATE:
-      get_argument (f->esp, &argv[0], 2);      
-      f->eax = sys_create ((const char *) argv[0], (const char *) argv[1]);
-      break;
-    case SYS_REMOVE:
-      get_argument (f->esp, &argv[0], 1);
-      f->eax = sys_remove (argv[0]);
-      break;
-    case SYS_OPEN:
-      get_argument (f->esp, &argv[0], 1);
-      f->eax = sys_open (argv[0]);
-      break;
-    case SYS_FILESIZE:
-      get_argument (f->esp, &argv[0], 1);
-      f->eax = sys_filesize (argv[0]);
-      break;
-    case SYS_READ:
-      get_argument (f->esp, &argv[0], 3);
-      f->eax = sys_read (argv[0], argv[1], argv[2]);
-      break;
-    case SYS_WRITE:
-      get_argument (f->esp, &argv[0], 3);
-      if (!validate_addr ((void*) argv[1])) 
-        sys_exit (-1);
 
-      f->eax = sys_write ((int) argv[0], (const void*) argv[1], (unsigned) argv[2]);
+    case SYS_EXEC:
+      get_argument (f->esp, arg, 1);
+      check_address ((const char *) arg[0]);
+      f->eax = sys_exec ((const char *) arg[0]);
+      break;
+
+    case SYS_WAIT:
+      get_argument (f->esp, arg, 1);
+      f->eax = sys_wait ((tid_t) arg);
+      break;
+
+    case SYS_CREATE:
+      get_argument (f->esp, arg, 2);      
+      check_address ((const char *) arg[0]);
+      f->eax = sys_create ((const char *) arg[0], (unsigned int) arg[1]);
+      break;
+
+    case SYS_REMOVE:
+      get_argument (f->esp, arg, 1);
+      check_address ((const char *) arg[0]);
+      f->eax = sys_remove ((const char *) arg[0]);
+      break;
+
+    case SYS_OPEN:
+      get_argument (f->esp, arg, 1);
+      check_address ((const char *) arg[0]);
+      f->eax = sys_open ((const char *) arg[0]);
+      break;
+
+    case SYS_FILESIZE:
+      get_argument (f->esp, arg, 1);
+      f->eax = sys_filesize (arg[0]);
+      break;
+      
+    case SYS_READ:
+      get_argument (f->esp, arg, 3);
+      check_address(arg[1]);
+      f->eax = sys_read (arg[0], (void *) arg[1], (unsigned int) arg[2]);
+      break;
+
+    case SYS_WRITE:
+      get_argument (f->esp, arg, 3);
+      check_address(arg[1]);
+      f->eax = sys_write ((int) arg[0], (const void *) arg[1], (unsigned int) arg[2]);
       break;
 
     case SYS_SEEK:
-      get_argument (f->esp, &argv[0], 2);
-      sys_seek (argv[0], argv[1]);
+      get_argument (f->esp, arg, 2);
+      sys_seek (arg[0], (unsigned int) arg[1]);
       break;
+
     case SYS_TELL:
-      get_argument (f->esp, &argv[0], 1);
-      f->eax = sys_tell (argv[0]);
+      get_argument (f->esp, arg, 1);
+      f->eax = sys_tell (arg[0]);
       break;
+
     case SYS_CLOSE:
-      get_argument (f->esp, &argv[0], 1);
-      sys_close (argv[0]);
+      get_argument (f->esp, arg, 1);
+      sys_close (arg[0]);
       break;
   }
 }
 
-#ifdef USERPROG
 void 
 sys_exit (int status)
 {
-  struct thread *t = thread_current ();
+  struct thread *t = thread_current(); 
   t->pcb->exit_code = status;
-  if (!t->pcb->is_loaded)
-    sema_up (&(t->pcb->sema_load));
   
-  printf ("%s: exit(%d)\n", t->name, status);//process exit message
-  
+  printf ("%s: exit(%d)\n", t->name, status); //process exit message
   thread_exit ();
 }
 
-pid_t 
+tid_t 
 sys_exec (const char *cmd_line)
 {
-  pid_t pid = process_execute (cmd_line);
-  struct pcb *child_pcb = get_child_pcb (pid);
-  if (pid == -1 || !child_pcb->is_loaded) {
+  tid_t pid = process_execute (cmd_line);
+  struct thread *child = get_child_process (pid);
+
+  if (pid == -1 || !(child->pcb->is_loaded))
+  {
     return -1;
   }
 
@@ -139,7 +149,7 @@ sys_exec (const char *cmd_line)
 }
 
 int 
-sys_wait (pid_t pid)
+sys_wait (tid_t pid)
 {
   return process_wait (pid);
 }
@@ -147,161 +157,165 @@ sys_wait (pid_t pid)
 bool 
 sys_create (const char *file, unsigned initial_size)
 {
-  if (file == NULL || !validate_addr (file)) {
-    sys_exit (-1);
-  }
-
-  return filesys_create (file, initial_size);
+  bool retval = filesys_create (file, initial_size);
+  return retval;
 }
 
 bool 
 sys_remove (const char *file)
 {
-  if (file == NULL || !validate_addr (file)) {
-    sys_exit (-1);
-  }
-
   return filesys_remove (file);
 }
 
 int 
 sys_open (const char *file)
 {
-  struct file *file_;
-  struct thread *t = thread_current ();
-  int fd_count = t->pcb->fd_count;
+  lock_acquire(&filesys_lock);
   
-  if (file == NULL || !validate_addr (file)) {
-    sys_exit (-1);
+  struct file *_file;
+  struct thread *t = thread_current ();
+  int fd = 0;
+
+  _file = filesys_open (file);
+  if (_file == NULL) 
+  {
+    lock_release(&filesys_lock);
+    return -1;
+  }
+    
+  fd = process_add_file (_file);
+  if (fd == -1)
+  {
+    file_close(_file);
+    lock_release(&filesys_lock);
+    return -1;
   }
 
-  file_ = filesys_open (file);
-  if (file_ == NULL) 
-    return -1;
+  t->pcb->run_file = _file;
+  file_deny_write(_file);
 
-  // ...
-    
-  t->pcb->fd_table[t->pcb->fd_count++] = file_;
-
-  return fd_count;
+  lock_release(&filesys_lock);
+  return fd;
 }
 
 int 
 sys_filesize (int fd)
 {
-  struct thread *t = thread_current ();
-  struct file *file = t->pcb->fd_table[fd];
+  lock_acquire(&filesys_lock);
+  struct file *file = process_get_file(fd);
 
   if (file == NULL)
+  {
+    lock_release(&filesys_lock);
     return -1;
+  }
 
+  lock_release(&filesys_lock);
   return file_length (file);
 }
 
 int 
 sys_read (int fd, void *buffer, unsigned size)
 {
-  if (!validate_addr(buffer)) {
-    sys_exit (-1);
+  lock_acquire(&filesys_lock);
+  int read_bytes = -1; 
+
+  if (fd == 0) // fd가 0이면, 키보드 입력 
+  {
+    unsigned i; 
+    for (i = 0; i < size; i++)
+    {
+      ((uint8_t *)buffer)[i] = input_getc();
+    }
+    read_bytes = size;
+  }
+  else 
+  {
+    struct file *f = process_get_file(fd);
+    if (f == NULL)
+    {
+      lock_release(&filesys_lock);
+      return -1; 
+    }
+
+    read_bytes = file_read(f, buffer, size);
   }
 
-  int fd_count = thread_current()->pcb->fd_count;
-  int bytes_read;
-  struct file *file = thread_current()->pcb->fd_table[fd];
-
-  if (file == NULL || fd < 0 || fd > fd_count) {
-    sys_exit (-1);
-  }
-
-  sema_down (&mutex);
-  read_count++;
-  if (read_count == 1) 
-    sema_down (&rw_mutex);
-  sema_up (&mutex);
-  bytes_read = file_read (file, buffer, size);
-  sema_down (&mutex);
-  read_count--;
-  if (read_count == 0)
-    sema_up (&rw_mutex);
-  sema_up (&mutex);
-
-  return bytes_read;
+  lock_release(&filesys_lock);
+  return read_bytes;
 }
 
 int 
 sys_write (int fd, const void *buffer, unsigned size)
 {
-  int fd_count = thread_current()->pcb->fd_count;
-  if (fd >= fd_count || fd < 1) {
-    sys_exit (-1);
-  } else if (fd == 1) {
-    putbuf(buffer, size);
-    return size;
-  } else {
-    int bytes_written;
-    struct file *file = thread_current ()->pcb->fd_table[fd];
+  lock_acquire(&filesys_lock);
 
-    if (file == NULL) {
-      sys_exit (-1);
+  int written_bytes = -1;
+
+  if (fd == 1)// fd가 1일 경우, 표준 출력으로 간주하여 화면에 출력
+  {
+    putbuf(buffer, size); // 버퍼의 내용을 화면에 출력
+    written_bytes = size;
+  }
+  else 
+  { 
+    struct file *f = process_get_file(fd);
+    if (f == NULL)
+    {
+      lock_release(&filesys_lock);
+      return -1; 
     }
 
-    sema_down (&rw_mutex);
-    bytes_written = file_write (file, buffer, size);
-    sema_up (&rw_mutex);
-
-    return bytes_written;
+    written_bytes = file_write(f, buffer, size);
   }
 
-  return -1;
+  lock_release(&filesys_lock);
+  return written_bytes;
 }
 
 void 
 sys_seek (int fd, unsigned position)
 {
-  struct file *file;
-  
-  file = thread_current ()->pcb->fd_table[fd];
-  if (file != NULL)
-    file_seek (file, position);
+  lock_acquire(&filesys_lock);
+
+  struct file *f = process_get_file(fd);
+  if (f != NULL)
+    file_seek (f, position);
+
+  lock_release(&filesys_lock);
 }
 
 unsigned 
 sys_tell (int fd)
 {
-  struct file *file;
+  lock_acquire(&filesys_lock);
   
-  file = thread_current ()->pcb->fd_table[fd];
-  if (file == NULL)
+  int f_pos = -1;
+  struct file *f = process_get_file(fd);
+  if (f == NULL)
+  { 
+    lock_release(&filesys_lock);
     return -1;
-    
-  return file_tell (file);
+  }
+  f_pos = file_tell(f);
+
+  lock_release(&filesys_lock);
+
+  return f_pos;
 }
 
 void 
 sys_close (int fd)
 {
-  struct file *file;
-  struct thread *t = thread_current();
-  int i;
+  lock_acquire(&filesys_lock);
 
-  if (fd >= t->pcb->fd_count || fd < 2)
+  struct file *f = process_get_file(fd);
+  if (f == NULL)
   {
-    sys_exit(-1);
-  }
-  
-  file = t->pcb->fd_table[fd];
-  if (file == NULL)
+    lock_release(&filesys_lock);
     return;
-
-  file_close(file);
-    
-  t->pcb->fd_table[fd] = NULL;
-  for(i = fd; i < t->pcb->fd_count; i++)
-  {
-    t->pcb->fd_table[i] = t->pcb->fd_table[i + 1];
   }
+  process_close_file(fd);
 
-  t->pcb->fd_count--;
+  lock_release(&filesys_lock);
 }
-
-#endif

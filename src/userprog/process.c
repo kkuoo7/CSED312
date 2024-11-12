@@ -17,6 +17,9 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "syscall.h"
+
+#define FD_MAX 64
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -43,6 +46,52 @@ pars_arguments (char *cmd, char **argv)
 
   return argc;
 }
+
+void argument_stack (char **argv, int argc, struct intr_frame *if_)
+{
+  // 1. 인자를 스택에 역순으로 저장
+  for (int i = argc - 1; i >= 0; i--)
+  {
+    size_t len = strlen (argv[i]) + 1;
+    if_->esp -= len;
+    memcpy(if_->esp, argv[i], len);
+    argv[i] = (char *) if_->esp;
+  }
+
+  // 2. 스택을 4바이트로 정렬
+  while ((uintptr_t) if_->esp % 4 != 0)
+  {
+    if_->esp -= 1;
+    *((uint8_t *) if_->esp) = 0;
+  }
+
+  // 3. NULL 포인터 삽입
+  if_->esp -= sizeof(char *);
+  *(char **)(if_->esp) = 0;
+  
+  // 4. argv 배열의 포인터를 역순으로 스택에 저장
+  for (int i = argc - 1; i >= 0; i--) 
+  {
+      if_->esp -= sizeof(char *);
+      *(char **)(if_->esp) = argv[i];
+  }
+
+  // 5. argv의 시작 주소를 스택에 저장
+  char **argv_start = if_->esp;
+  if_->esp -= sizeof(char **);
+  *(char ***)(if_->esp) = argv_start;
+  
+  // 6. argc 값을 스택에 저장
+  if_->esp -= sizeof(int);
+  *(uint32_t *)(if_->esp) = argc;
+
+   // 7. NULL 리턴 주소를 위한 공간 할당
+  if_->esp -= sizeof(void *);
+  *(uint32_t *)(if_->esp) = 0;
+
+  return;
+}
+
 
 void
 init_stack_arg (char **argv, int argc, void **esp)
@@ -86,23 +135,14 @@ init_stack_arg (char **argv, int argc, void **esp)
   **(uint32_t **)esp = 0;
 }
 
-//added functions
-
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
-
-
-
 tid_t
 process_execute (const char *file_name) 
 {
-  /*
-  char *fn_copy;
-  tid_t tid;
-  */
-  char *fn_copy, *parsed_fn;
+  char *fn_copy, *file_name_parsed;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
@@ -111,37 +151,24 @@ process_execute (const char *file_name)
   if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
-  
-  /* Create a new thread to execute FILE_NAME. */
-  /*
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
-  else{
-    sema_down(&thread_current()->load_sema);
-  }
 
-
-  palloc_free_page (fn_copy);
-
-  return tid;*/
-  parsed_fn = palloc_get_page (0);
-  if (parsed_fn == NULL) {
+  file_name_parsed = palloc_get_page (0);
+  if (file_name_parsed == NULL) {
     return TID_ERROR;
   }
 
-  strlcpy (parsed_fn, file_name, PGSIZE);
+  strlcpy (file_name_parsed, file_name, PGSIZE);
+  parse_filename (file_name_parsed);
 
-  pars_filename (parsed_fn);
-
-  tid = thread_create (parsed_fn, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (file_name_parsed, PRI_DEFAULT, start_process, fn_copy);
+  
   if (tid == TID_ERROR) {
     palloc_free_page (fn_copy); 
   } else {
-    sema_down (&(get_child_pcb (tid)->sema_load));
+    sema_down (&(get_child_process(tid)->pcb->sema_load));
   }
   
-  palloc_free_page (parsed_fn);
+  palloc_free_page (file_name_parsed);
 
   return tid;
 }
@@ -162,24 +189,29 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
 
-  //parse arguments
+  /* parse arguments */
   char **argv = palloc_get_page(0);
-  int argc = pars_arguments(file_name, argv);
-  success = load (argv[0], &if_.eip, &if_.esp);
-  if (success)
-    init_stack_arg (argv, argc, &if_.esp);
-  palloc_free_page (argv);
+  int argc = parse_arguments(file_name, argv);
 
+  thread_current()->pcb->is_loaded = success = load (argv[0], &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
-  palloc_free_page (file_name);
+  if (success)
+  {
+    //printf("Success to load %s\n", argv[0]);  // 디버깅을 위한 출력
+    //argument_stack(argv, argc, &if_);
+    init_stack_arg (argv, argc, &if_.esp);
+    //hex_dump(if_.esp , if_.esp , PHYS_BASE - if_.esp ,true);
+  }
 
-  sema_up (&(thread_current ()->pcb->sema_load)); // 1
+  palloc_free_page (argv);
+  palloc_free_page (file_name);
+  
+  sema_up (&(thread_current ()->pcb->sema_load));
 
   if (!success) 
-    thread_exit ();
+    sys_exit (-1);
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -203,21 +235,31 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid) 
 {
-  struct thread *child = get_child_thread (child_tid);
+  struct thread *cur = thread_current();
   int exit_code;
+  bool ret_flag = false;
 
-  if (child == NULL)
+  struct thread *child = get_child_process(child_tid);
+  if (child == NULL || !child->pcb->is_loaded)
     return -1;
-  
-  if (child->pcb == NULL || child->pcb->exit_code == -2 || !child->pcb->is_loaded) {
-    return -1;
-  }
-  
+
+  //printf("process_wait start!\n\n");
+
+  child->pcb->waited = true;
+
+  //printf("process_wait sleep!\n\n");
   sema_down (&(child->pcb->sema_wait)); // sema down to wait on child process
+  //printf("process_wait wakeup!\n\n");
   
-  exit_code = child->pcb->exit_code; // child has exited
-  list_remove (&(child->elem_child_process));
-  palloc_free_page (child->pcb);
+  exit_code = child->pcb->exit_code; // child가 종료됨을 알림
+
+  if (child->pcb == NULL || child->pcb->exit_code == -1 || !child->pcb->is_exited || child->pcb->parent_process != cur || child->pcb->waited)
+    return -1;
+
+  // remove_child_process(child_tid); 
+  list_remove(&child->child_elem);
+  palloc_free_page(child->pcb);
+  child->pcb = NULL;
   palloc_free_page (child);
 
   return exit_code;
@@ -228,14 +270,22 @@ void
 process_exit (void)
 {
   struct thread *cur = thread_current ();
+  struct thread *child;
   uint32_t *pd;
+  struct list_elem *e; 
 
-  for (int i = cur->pcb->fd_count - 1; i > 1; i--)
+  // printf("process_exit start! \n\n");
+
+  for (int fd = 2; fd <= FD_MAX; fd++)
   {
-    sys_close (i);
+    process_close_file(fd);
   }
 
-  palloc_free_page (cur->pcb->fd_table);
+  // 파일 디스크립터 테이블 메모리 해제 후 NULL로 설정
+  if (cur->pcb->fd_table != NULL) {
+      palloc_free_page(cur->pcb->fd_table);
+      cur->pcb->fd_table = NULL;
+  }
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -254,10 +304,15 @@ process_exit (void)
       pagedir_destroy (pd);
     }
 
-  //child process is about to exit
-  cur->pcb->is_exited = true;
-  sema_up (&(cur->pcb->sema_wait)); 
-  // sema up to notifiy parent process
+  cur->pcb->is_exited = true; // child process is about to exit
+  sema_up (&(cur->pcb->sema_wait));  // sema up to notifiy parent process
+
+  /* 만약 부모가 먼저 종료되었으면 실행 정보를 해제*/
+    if (cur->parent_process == NULL && cur->pcb != NULL) 
+    {
+        palloc_free_page(cur->pcb);
+        cur->pcb = NULL;
+    }
 }
 
 /* Sets up the CPU for running user code in the current
@@ -275,6 +330,123 @@ process_activate (void)
      interrupts. */
   tss_update ();
 }
+
+/* 자식 프로세스 디스크립터를 검색하는 함수 (get_child_process)
+현재 프로세스의 자식 리스트를 검색하여 해당 pid에 맞는 프로세스 디스크립터를 반환
+struct thread *thread_current(void) : 현재 프로세스의 디스크립터 반환
+pid를 갖는 프로세스 디스크립터가 존재하지 않을 경우 NULL 반환 */
+struct thread* 
+get_child_process(tid_t child_tid)
+{
+  struct thread *t = thread_current();
+  struct thread *child;
+  struct list *child_list = &(t->children);
+
+  for (struct list_elem *e = list_begin(child_list); e != list_end(child_list); e = list_next(e))
+  {
+    child = list_entry(e, struct thread, child_elem);
+
+    if (child->tid == child_tid)
+      return child;
+  }
+
+  return NULL;
+}
+
+/* 프로세스 디스크립터를 자식 리스트에서 제거 후 메모리 해제 */
+void 
+remove_child_process(tid_t child_tid)
+{
+  struct thread *t = thread_current();
+  struct thread *child; 
+  struct list *child_list = &(t->children);
+
+  for (struct list_elem *e = list_begin(child_list); e != list_end(child_list); e = list_next(e))
+  {
+    child = list_entry(e, struct thread, child_elem);
+    if (child->tid == child_tid)
+    {
+      list_remove(e);
+      palloc_free_page(child->pcb);
+      child->pcb = NULL;
+      palloc_free_page (child);
+      return;
+    }
+  }
+}
+
+int
+parse_arguments (char *cmd, char **argv)
+{
+  char *token, *save_ptr;
+  int argc = 0;
+
+  for (token = strtok_r (cmd, " ", &save_ptr); token != NULL; 
+  token = strtok_r (NULL, " ", &save_ptr), argc++)
+  {
+    argv[argc] = token;
+  }
+
+  return argc;
+}
+
+void
+parse_filename (char *cmd)
+{
+  char *save_ptr;
+  cmd = strtok_r (cmd, " ", &save_ptr);
+  return;
+}
+
+/*파일 객체에 대한 파일 디스크립터 생성*/
+int 
+process_add_file(struct file *f) 
+{
+    struct thread *cur = thread_current();
+    
+    for (int fd = 2; fd <= FD_MAX; fd++)
+    {
+      if (cur->pcb->fd_table[fd] == NULL)
+      {
+        cur->pcb->fd_table[fd] = f;
+        cur->pcb->next_fd = fd + 1;
+        return fd;
+      }
+    }
+    
+    return -1;  // 파일 디스크립터 테이블이 꽉 찬 경우
+}
+
+/*프로세스의 파일 디스크립터 테이블을 검색하여 파일 객체의 주소를 리턴*/
+struct file*
+process_get_file (int fd)
+{
+  struct thread *cur = thread_current();
+
+  if (fd >= 2 && fd <= FD_MAX)
+    return cur->pcb->fd_table[fd];
+
+  return NULL;
+
+}
+
+/*file_close() 를 호출하여, 파일 디스크립터에 해당하는 파일의 inode reference
+count를 1씩 감소. 해당 파일 디스크립터 엔트리를 NULL로 초기화*/
+void
+process_close_file (int fd)
+{
+  struct thread *cur = thread_current();
+
+  if (cur->pcb->fd_table[fd] != NULL && fd >= 2 && fd <= FD_MAX)
+  {
+    if (cur->pcb->run_file == cur->pcb->fd_table[fd])
+      cur->pcb->run_file = NULL;
+
+    file_close(cur->pcb->fd_table[fd]); // 파일 디스크립터에 해당하는 파일을 닫음
+    cur->pcb->fd_table[fd] = NULL;
+  }
+}
+
 
 /* We load ELF binaries.  The following definitions are taken
    from the ELF specification, [ELF1], more-or-less verbatim.  */
@@ -366,12 +538,17 @@ load (const char *file_name, void (**eip) (void), void **esp)
   process_activate ();
 
   /* Open executable file. */
+  lock_acquire(&filesys_lock);
   file = filesys_open (file_name);
   if (file == NULL) 
-    {
-      printf ("load: %s: open failed\n", file_name);
-      goto done; 
-    }
+  {
+    printf ("load: %s: open failed\n", file_name);
+    goto done; 
+  }
+
+  t->pcb->run_file = file;
+  file_deny_write(file);
+  lock_release(&filesys_lock);
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -451,12 +628,13 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
-
   success = true;
 
  done:
   /* We arrive here whether the load is successful or not. */
   file_close (file);
+  t->pcb->run_file = NULL;
+
   return success;
 }
 
