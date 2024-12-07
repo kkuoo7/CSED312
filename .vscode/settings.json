@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "synch.h": "c",
+        "vm.h": "c",
+        "ide.h": "c",
+        "ft.h": "c"
+    }
+}

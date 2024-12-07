@@ -18,6 +18,8 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "syscall.h"
+#include "vm/ft.h"
+#include "vm/spt.h"
 
 #define FD_MAX 64
 
@@ -719,14 +721,20 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
       /* Get a page of memory. */
-      uint8_t *kpage = palloc_get_page (PAL_USER);
+      //uint8_t *kpage = palloc_get_page (PAL_USER);
+      struct frame *f = falloc(upage, thread_current());
+      if (f == NULL) {
+          return false;  // Handle out-of-memory case
+      }
+      uint8_t *kpage = f->kpage;  // Use the frame's kernel page
+
       if (kpage == NULL)
         return false;
 
       /* Load this page. */
       if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
         {
-          palloc_free_page (kpage);
+          ffree (kpage);
           return false; 
         }
       memset (kpage + page_read_bytes, 0, page_zero_bytes);
@@ -734,7 +742,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       /* Add the page to the process's address space. */
       if (!install_page (upage, kpage, writable)) 
         {
-          palloc_free_page (kpage);
+          ffree (kpage);
           return false; 
         }
 
@@ -751,17 +759,20 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 static bool
 setup_stack (void **esp) 
 {
-  uint8_t *kpage;
   bool success = false;
-
-  kpage = palloc_get_page (PAL_USER | PAL_ZERO);
+  struct frame *f = falloc(PHYS_BASE - PGSIZE, thread_current());
+  if (f == NULL) {
+    return false;  // Handle out-of-memory case
+  }
+  uint8_t *kpage = f->kpage;  // Use the frame's kernel page
+  
   if (kpage != NULL) 
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
         *esp = PHYS_BASE;
       else
-        palloc_free_page (kpage);
+        ffree (kpage);
     }
   return success;
 }
