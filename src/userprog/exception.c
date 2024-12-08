@@ -5,6 +5,10 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "syscall.h"
+#include "vm/spt.h"
+#include "userprog/process.h"
+
+#define MAX_STACK_SIZE 0x800000
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -149,7 +153,24 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-  sys_exit(-1); // FOR TEST CASE
+  //error case
+   if (is_kernel_vaddr (fault_addr) || !not_present) sys_exit (-1);
+
+  //Let's find this missing page-LJY
+  void *upage = pg_round_down (fault_addr);
+  struct hash *spt= &thread_current()->spt;
+  struct spt_elem *spte= find_spte(spt, upage);
+  void *esp = f->esp;
+
+   //do you need it to be zero page? a.k.a stck expansion
+  if (esp - 32 <= fault_addr && PHYS_BASE - MAX_STACK_SIZE <= fault_addr) {
+    if (!find_spte(spt, upage)) {
+      init_spte_zero (spt, upage);
+    }
+  }
+   //Attempt to load page!
+   if(load_page(spt, upage)) return;
+   else sys_exit(-1); // FOR TEST CASE
 
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to

@@ -82,7 +82,7 @@ init_spte_frame (struct hash *spt, void *upage, void *kpage)
   
   e->status = PAGE_FRAME;
 
-  e->in_memory = false;; 
+  e->in_memory = true; 
   e->swap_index = NULL;
 
   e->file = NULL;
@@ -103,7 +103,7 @@ init_spte_file (struct hash *spt, void *_upage, struct file *_file, off_t ofs, u
   
   e->status = PAGE_FILE;
 
-  e->in_memory = false;; 
+  e->in_memory = false;
   e->swap_index = NULL;
 
   e->file = _file;

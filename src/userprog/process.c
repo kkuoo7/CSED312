@@ -722,31 +722,8 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-      /* Get a page of memory. */
-      //uint8_t *kpage = palloc_get_page (PAL_USER);
-      struct frame *f = falloc(upage, thread_current());
-      if (f == NULL) {
-          return false;  // Handle out-of-memory case
-      }
-      uint8_t *kpage = f->kpage;  // Use the frame's kernel page
-
-      if (kpage == NULL)
-        return false;
-
-      /* Load this page. */
-      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
-        {
-          ffree (kpage);
-          return false; 
-        }
-      memset (kpage + page_read_bytes, 0, page_zero_bytes);
-
-      /* Add the page to the process's address space. */
-      if (!install_page (upage, kpage, writable)) 
-        {
-          ffree (kpage);
-          return false; 
-        }
+      /* Instead of loading file, just setup spte-JYL*/
+     init_spte_file (&thread_current ()->spt, upage, file, ofs, page_read_bytes, page_zero_bytes, writable);
 
       /* Advance. */
       read_bytes -= page_read_bytes;
@@ -771,12 +748,71 @@ setup_stack (void **esp)
   if (kpage != NULL) 
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
-      if (success)
+      if (success){
+        init_spte_frame (&thread_current ()->spt, PHYS_BASE - PGSIZE, kpage);//LJY
         *esp = PHYS_BASE;
+        }
       else
         ffree (kpage);
     }
   return success;
+}
+
+bool
+load_page (struct hash *spt, void *upage)
+{
+  struct spt_elem *spte = find_spte (spt, upage);
+  if (spte == NULL) sys_exit (-1);
+
+  void *kpage = falloc (upage,thread_current());
+  if (kpage == NULL) sys_exit (-1);
+
+  bool was_holding_lock = lock_held_by_current_thread (&filesys_lock);
+
+  switch (spte->status)
+  {
+  case PAGE_ZERO:
+    memset (kpage, 0, PGSIZE);
+    break;
+  case PAGE_SWAP:
+    //swap_in(e, kpage);
+    break;
+    
+  case PAGE_FILE:
+    if (!was_holding_lock)
+      lock_acquire (&filesys_lock);
+    
+    if (file_read_at (spte->file, kpage, spte->read_bytes, spte->offset) != spte->read_bytes)
+    {
+      falloc (kpage,thread_current());
+      lock_release (&filesys_lock);
+      sys_exit (-1);
+    }
+    
+    memset (kpage + spte->read_bytes, 0, spte->zero_bytes);
+    if (!was_holding_lock)
+      lock_release (&filesys_lock);
+
+    break;
+
+  default:
+    sys_exit (-1);
+  }
+
+  
+  uint32_t *pagedir = thread_current ()->pagedir;
+
+  if (!pagedir_set_page (pagedir, upage, kpage, spte->writable))
+  {
+    ffree (kpage);
+    sys_exit (-1);
+  }
+
+  spte->kpage = kpage;
+  spte->status = PAGE_FRAME;
+  spte->in_memory = true;
+
+  return true;
 }
 
 /* Adds a mapping from user virtual address UPAGE to kernel

@@ -116,7 +116,7 @@ struct thread
    struct list_elem child_elem;    // Element for child list in the parent process
 #endif
 
-   struct hash spt; 
+   struct hash spt;
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */

@@ -33,6 +33,8 @@ struct spt_elem {
 void init_spt (struct hash *spt);
 void free_spt (struct hash *spt);
 
+struct spt_elem *find_spte (struct hash *spt, void *upage);
+
 void init_spte_zero (struct hash *spt, void *upage);
 void init_spte_frame (struct hash *spt, void *upage, void *kpage);
 struct spt_elem* init_spte_file (struct hash *, void *, struct file *, off_t, uint32_t, uint32_t, bool);

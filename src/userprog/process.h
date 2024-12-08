@@ -38,4 +38,6 @@ int process_add_file (struct file *f);
 struct file* process_get_file (int fd);
 void process_close_file (int fd);
 
+bool load_page (struct hash *spt, void *upage);
+
 #endif /* userprog/process.h */
