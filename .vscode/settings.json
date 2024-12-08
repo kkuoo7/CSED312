@@ -3,6 +3,7 @@
         "synch.h": "c",
         "vm.h": "c",
         "ide.h": "c",
-        "ft.h": "c"
+        "ft.h": "c",
+        "vaddr.h": "c"
     }
 }

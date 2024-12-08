@@ -87,11 +87,9 @@ zfalloc(void *upage, struct thread *owner) {
 
 void 
 evict_frame(void) {
-    struct list_elem *e;
-
     //evict should allways be called in falloc
     if(!lock_held_by_current_thread(&frame_table_lock)) PANIC("evict_frame:sync error");
-
+    //some eviction method
     return NULL;
 }
 
@@ -119,7 +117,6 @@ ffree(void *kpage) {
     }
 
     lock_release(&frame_table_lock);
-
     // If no frame was found for the given kpage
     printf("ffree: The frame does not exsist.");
 }

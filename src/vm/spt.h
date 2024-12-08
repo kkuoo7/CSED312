@@ -26,15 +26,16 @@ struct spt_elem {
     size_t zero_bytes;       // Bytes to zero-initialize
     bool writable;           // can you write to this page?
 
-    struct hash_elem elem;   // Hash table element
+    struct hash_elem h_elem;   // Hash table element
 };
 
 
 void init_spt (struct hash *spt);
 void free_spt (struct hash *spt);
 
-
-
+void init_spte_zero (struct hash *spt, void *upage);
+void init_spte_frame (struct hash *spt, void *upage, void *kpage);
+struct spt_elem* init_spte_file (struct hash *, void *, struct file *, off_t, uint32_t, uint32_t, bool);
 
 
 
