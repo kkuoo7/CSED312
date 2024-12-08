@@ -9,14 +9,14 @@ static hash_hash_func spte_hash;
 static hash_less_func spte_less;
 
 static unsigned
-spt_hash (const struct hash_elem *he, void *aux UNUSED)
+spte_hash (const struct hash_elem *he, void *aux UNUSED)
 {
   struct spt_elem *spte = hash_entry(he, struct spt_elem, h_elem);
   return hash_bytes (&spte->upage, sizeof (spte->kpage));
 }
 
 static bool 
-spt_less (const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED)
+spte_less (const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED)
 {
   struct spt_elem *spte_a = hash_entry (a, struct spt_elem, h_elem);
   struct spt_elem *spte_b = hash_entry (b, struct spt_elem, h_elem);
@@ -68,7 +68,7 @@ init_spte_zero (struct hash *spt, void *upage)
   e->file = NULL;
   e->writable = true;
 
-  hash_insert (spt, &e->elem);
+  hash_insert (spt, &e->h_elem);
 }
 
 void
@@ -88,7 +88,7 @@ init_spte_frame (struct hash *spt, void *upage, void *kpage)
   e->file = NULL;
   e->writable = true;
   
-  hash_insert (spt, &e->elem);
+  hash_insert (spt, &e->h_elem);
 }
 
 struct spt_elem*
@@ -112,7 +112,7 @@ init_spte_file (struct hash *spt, void *_upage, struct file *_file, off_t ofs, u
   e->zero_bytes = _zero_bytes;
   e->writable = _writable;
   
-  hash_insert (spt, &e->elem);
+  hash_insert (spt, &e->h_elem);
   
   return e;
 }

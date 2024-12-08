@@ -290,6 +290,8 @@ process_exit (void)
 
   file_close(cur->pcb->run_file);
 
+  free_spt(&cur->spt);
+
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;

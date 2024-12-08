@@ -242,7 +242,7 @@ thread_create (const char *name, int priority,
   list_push_back (&(t->parent_process->children), &(t->child_elem));
 #endif
 
-  init_spt(t->spt);
+  init_spt(&t->spt);
 
   /* Add to run queue. */
   thread_unblock (t);
