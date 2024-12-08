@@ -4,6 +4,7 @@
         "vm.h": "c",
         "ide.h": "c",
         "ft.h": "c",
-        "vaddr.h": "c"
+        "vaddr.h": "c",
+        "interrupt.h": "c"
     }
 }

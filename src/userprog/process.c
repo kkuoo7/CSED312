@@ -764,15 +764,15 @@ load_page (struct hash *spt, void *upage)
   struct spt_elem *spte = find_spte (spt, upage);
   if (spte == NULL) sys_exit (-1);
 
-  void *kpage = falloc (upage,thread_current());
-  if (kpage == NULL) sys_exit (-1);
+  struct frame *f = falloc (upage,thread_current());
+  if (f->kpage == NULL) sys_exit (-1);
 
   bool was_holding_lock = lock_held_by_current_thread (&filesys_lock);
 
   switch (spte->status)
   {
   case PAGE_ZERO:
-    memset (kpage, 0, PGSIZE);
+    memset (f->kpage, 0, PGSIZE);
     break;
   case PAGE_SWAP:
     //swap_in(e, kpage);
@@ -782,14 +782,14 @@ load_page (struct hash *spt, void *upage)
     if (!was_holding_lock)
       lock_acquire (&filesys_lock);
     
-    if (file_read_at (spte->file, kpage, spte->read_bytes, spte->offset) != spte->read_bytes)
+    if (file_read_at (spte->file, f->kpage, spte->read_bytes, spte->offset) != spte->read_bytes)
     {
-      falloc (kpage,thread_current());
+      ffree (f->kpage);
       lock_release (&filesys_lock);
       sys_exit (-1);
     }
     
-    memset (kpage + spte->read_bytes, 0, spte->zero_bytes);
+    memset (f->kpage + spte->read_bytes, 0, spte->zero_bytes);
     if (!was_holding_lock)
       lock_release (&filesys_lock);
 
@@ -799,16 +799,15 @@ load_page (struct hash *spt, void *upage)
     sys_exit (-1);
   }
 
-  
   uint32_t *pagedir = thread_current ()->pagedir;
 
-  if (!pagedir_set_page (pagedir, upage, kpage, spte->writable))
+  if (!pagedir_set_page (pagedir, upage, f->kpage, spte->writable))
   {
-    ffree (kpage);
+    ffree (f->kpage);
     sys_exit (-1);
   }
 
-  spte->kpage = kpage;
+  spte->kpage = f->kpage;
   spte->status = PAGE_FRAME;
   spte->in_memory = true;
 

@@ -1,5 +1,6 @@
 #include "vm/ft.h"
 #include "threads/synch.h"
+#include "threads/vaddr.h"////
 
 
 void 
@@ -42,6 +43,8 @@ falloc(void *upage, struct thread *owner) {
     list_push_back(&frame_table, &f->elem);  // Add frame to frame_table
 
     lock_release(&frame_table_lock);
+    ASSERT (pg_ofs (f->kpage) == 0);
+
     return f;
 
 }
