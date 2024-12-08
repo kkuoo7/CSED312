@@ -2,12 +2,14 @@
 #include "threads/synch.h"
 
 
-void frame_table_init(void) {
+void 
+frame_table_init(void) {
     list_init(&frame_table);
     lock_init(&frame_table_lock);
 }
 
-struct frame *falloc(void *upage, struct thread *owner) {
+struct frame *
+falloc(void *upage, struct thread *owner) {
 
     lock_acquire(&frame_table_lock);
 
@@ -15,12 +17,12 @@ struct frame *falloc(void *upage, struct thread *owner) {
     void *kpage = palloc_get_page(PAL_USER);
     
     if (kpage == NULL) {//free frame doesn’t exist
-		   /* evict_page();//try evict
+		    evict_frame();//try evict
 		    kpage = palloc_get_page(PAL_USER);//try again
         if (kpage == NULL) {//still nothing
 	        lock_release(&frame_table_lock);
 	        return NULL;
-		    }*/
+		    }
     return NULL;
     }
 
@@ -44,7 +46,8 @@ struct frame *falloc(void *upage, struct thread *owner) {
 
 }
 
-struct frame *zfalloc(void *upage, struct thread *owner) {
+struct frame *
+zfalloc(void *upage, struct thread *owner) {
 
     lock_acquire(&frame_table_lock);
 
@@ -52,12 +55,12 @@ struct frame *zfalloc(void *upage, struct thread *owner) {
     void *kpage = palloc_get_page(PAL_USER | PAL_ZERO);
     
     if (kpage == NULL) {//free frame doesn’t exist
-		   /* evict_page();//try evict
-		    kpage = palloc_get_page(PAL_USER);//try again
+		    evict_frame();//try evict
+		    kpage = palloc_get_page(PAL_USER | PAL_ZERO);//try again
         if (kpage == NULL) {//still nothing
 	        lock_release(&frame_table_lock);
 	        return NULL;
-		    }*/
+		    }
     return NULL;
     }
 
@@ -81,7 +84,19 @@ struct frame *zfalloc(void *upage, struct thread *owner) {
 
 }
 
-void ffree(void *kpage) {
+
+void 
+evict_frame(void) {
+    struct list_elem *e;
+
+    //evict should allways be called in falloc
+    if(!lock_held_by_current_thread(&frame_table_lock)) PANIC("evict_frame:sync error");
+
+    return NULL;
+}
+
+void 
+ffree(void *kpage) {
     ASSERT(kpage != NULL);
 
     lock_acquire(&frame_table_lock);

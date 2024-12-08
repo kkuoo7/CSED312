@@ -21,6 +21,7 @@ static struct lock frame_table_lock;  // Synchronize access to frame table
 void frame_table_init(void);
 struct frame *falloc(void *upage, struct thread *owner);
 struct frame *zfalloc(void *upage, struct thread *owner);
+void evict_frame(void);
 void ffree(void *kpage);
 
 #endif

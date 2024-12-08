@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "synch.h"
+#include <hash.h>
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -114,6 +115,8 @@ struct thread
    struct list children;           // List of child processes
    struct list_elem child_elem;    // Element for child list in the parent process
 #endif
+
+   struct hash spt; 
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
