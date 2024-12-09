@@ -4,6 +4,7 @@
 #include "threads/synch.h"
 #include "threads/thread.h"
 #include <list.h>
+#include "vm/page.h"
 
 /* System call initialization function */
 void syscall_init(void);
@@ -26,9 +27,10 @@ int sys_mmap(int fd, void *addr);
 void sys_munmap(int mapid);
 
 /* Helper functions */
-bool validate_addr(const void *addr);
-bool validate_buffer(const void *buffer, unsigned size);
-void get_argument(int *esp, int *arg, int count);
+void get_argument(void *esp, int *arg, int count);
+struct spt_entry *check_address (void *addr);
+void check_valid_buffer (void *buffer, unsigned size, bool to_write);
+void check_valid_string(const void *str);
 
 /* Lock for synchronizing file-related operations */
 struct lock filesys_lock;

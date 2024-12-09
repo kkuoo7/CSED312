@@ -14,24 +14,79 @@ static void syscall_handler (struct intr_frame *);
 // struct semaphore rw_mutex, mutex;
 // int read_count;
 
-#define USER_START_ADDRESS 0x8048000
+#define USER_START_ADDRESS 0x08048000
 
-void check_address (void *addr)
+struct spt_entry *check_address (void *addr)
 {
-  if (addr >= USER_START_ADDRESS && is_user_vaddr(addr))
-    return;
+  if (addr < (void *)USER_START_ADDRESS || addr >= (void *)0xc0000000)
+  {
+    // printf("\ncheck_address in syscall.c: %p\n", addr);
+    sys_exit(-1);
+  }
 
-  sys_exit(-1);
+  struct spt_entry *spte = find_spte(addr);
+  if (!spte)
+    sys_exit(-1);
+  
+  return spte;
+}
+
+void check_valid_buffer (void *buffer, unsigned size, bool to_write)
+{
+/*   void *start = pg_round_down(buffer);
+  void *end = buffer + size;
+
+  for (void *addr = start; addr < end; addr += PGSIZE)
+  {
+    struct spt_entry *spte = check_address(addr);
+
+    if (to_write && !spte->writable)
+      sys_exit(-20);
+  } */
+
+ struct spt_entry *spte = check_address(buffer);
+ 
+ if (to_write && !spte->writable)
+ {
+    sys_exit(-1);
+ }
+
+}
+
+void check_valid_string(const void *str)
+{
+/*   const char *char_ptr = (const char *)str;
+
+  while(true)
+  {
+    struct spt_entry *spte = check_address((void *)char_ptr);
+
+    if (!spte)
+      sys_exit(-30);
+
+    if (*char_ptr == '\0')
+      break;
+    
+    char_ptr++;
+  } */
+
+  check_address(str);
+
 }
 
 
 void 
-get_argument (int *esp, int *arg, int count)
+get_argument (void *esp, int *arg, int count)
 {
   for (int i = 0; i < count; i++)
   {
-    check_address(esp + i + 1);
-    arg[i] = *(esp + i + 1);
+    int *ptr = (int *)esp + i + 1;  // esp를 int *로 캐스팅 후 포인터 연산 수행
+    //printf("get_argument: esp[%d] = %p\n", i, (void *)ptr);
+
+    check_address(ptr);
+    arg[i] = *ptr;       // 값을 읽어 arg[i]에 저장
+
+    //printf("get_argument: arg[%d] = %d (as pointer: %p)\n", i, arg[i], (void *)arg[i]);
   }
 }
 
@@ -45,10 +100,13 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f) 
 {
+  //printf("syscall_handler: esp = %p\n", f->esp);
   check_address(f->esp);
 
   int arg[3];
   int syscall_number = *(int *)(f->esp);
+
+  //printf("syscall_handler: syscall_number = %d\n", syscall_number);
 
   switch (syscall_number)
   {
@@ -63,7 +121,7 @@ syscall_handler (struct intr_frame *f)
 
     case SYS_EXEC:
       get_argument (f->esp, arg, 1);
-      check_address ((const char *) arg[0]);
+      check_valid_string ((const char *) arg[0]);
       f->eax = sys_exec ((const char *) arg[0]);
       break;
 
@@ -74,19 +132,19 @@ syscall_handler (struct intr_frame *f)
 
     case SYS_CREATE:
       get_argument (f->esp, arg, 2);      
-      check_address ((const char *) arg[0]);
+      check_valid_string ((const char *) arg[0]);
       f->eax = sys_create ((const char *) arg[0], (unsigned int) arg[1]);
       break;
 
     case SYS_REMOVE:
       get_argument (f->esp, arg, 1);
-      check_address ((const char *) arg[0]);
+      check_valid_string ((const char *) arg[0]);
       f->eax = sys_remove ((const char *) arg[0]);
       break;
 
     case SYS_OPEN:
       get_argument (f->esp, arg, 1);
-      check_address ((const char *) arg[0]);
+      check_valid_string ((const char *) arg[0]);
       f->eax = sys_open ((const char *) arg[0]);
       break;
 
@@ -97,13 +155,14 @@ syscall_handler (struct intr_frame *f)
       
     case SYS_READ:
       get_argument (f->esp, arg, 3);
-      check_address(arg[1]);
+      check_valid_buffer(arg[1], arg[2], true);
       f->eax = sys_read (arg[0], (void *) arg[1], (unsigned int) arg[2]);
       break;
 
     case SYS_WRITE:
       get_argument (f->esp, arg, 3);
-      check_address(arg[1]);
+
+      check_valid_buffer(arg[1], arg[2], false);
       f->eax = sys_write ((int) arg[0], (const void *) arg[1], (unsigned int) arg[2]);
       break;
 

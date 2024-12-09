@@ -5,6 +5,9 @@
         "filesys.h": "c",
         "cstdlib": "c",
         "interrupt.h": "c",
-        "*.inc": "c"
+        "*.inc": "c",
+        "process.h": "c",
+        "stdbool.h": "c",
+        "syscall.h": "c"
     }
 }

@@ -3,6 +3,7 @@
 
 #include "threads/thread.h"
 #include "threads/interrupt.h"
+#include "vm/page.h"
 
 struct pcb {
   tid_t tid;                      // Thread ID of the process
@@ -38,6 +39,9 @@ int process_add_file (struct file *f);
 struct file* process_get_file (int fd);
 void process_close_file (int fd);
 
+bool handle_mm_fault(struct spt_entry *spte);
 bool load_page (struct hash *spt, void *upage);
+
+bool install_page (void *upage, void *kpage, bool writable);
 
 #endif /* userprog/process.h */

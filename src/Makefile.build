@@ -62,10 +62,10 @@ userprog_SRC += userprog/gdt.c		# GDT initialization.
 userprog_SRC += userprog/tss.c		# TSS management.
 
 # virtual memory code.
-vm_SRC = vm/ft.c			# Added
-vm_SRC += vm/spt.c			# Added
-#vm_SRC +=
-#vm_SRC +=
+vm_SRC = vm/page.c			# Added
+vm_SRC += vm/swap.c
+vm_SRC += vm/frame.c
+
 
 # Filesystem code.
 filesys_SRC  = filesys/filesys.c	# Filesystem core.
