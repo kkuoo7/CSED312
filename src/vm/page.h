@@ -18,7 +18,7 @@ struct mmap_file
     int mapid;
     struct file *file;
     struct list_elem elem;
-    struct list vme_list;
+    struct list spte_list;
 };
 
 struct spt_entry

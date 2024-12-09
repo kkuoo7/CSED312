@@ -197,6 +197,7 @@ start_process (void *file_name_)
   bool success;
 
   spt_init(&thread_current()->spt);
+  thread_current()->next_mapid = 0;
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -288,9 +289,17 @@ process_exit (void)
   struct thread *child;
   uint32_t *pd;
   struct list_elem *e; 
+  struct list *mmap_list; 
 
-  // printf("process_exit start! \n\n");
+  mmap_list = &thread_current()->mmap_list;
+  for (e = list_begin(mmap_list); e != list_end(mmap_list);)
+  {
+    struct mmap_file *file = list_entry(e, struct mmap_file, elem);
+    e = list_remove(e);
+    do_unmap(file);
 
+  }
+  
   for (int fd = 2; fd <= FD_MAX; fd++)
   {
     process_close_file(fd);
@@ -499,6 +508,32 @@ bool handle_mm_fault(struct spt_entry *_spte)
   }
 
   return true;
+}
+
+/* mmap_file의 vme_list에 연결된 모든 vm_entry들을 제거
+  vm_entry가리키는 가상 주소에 대한 물리 페이지가 존재하고, dirty하면 디
+  스크에 메모리 내용을 기록 */
+void 
+do_unmap(struct mmap_file *mmap_file)
+{
+  struct list *spte_list = &mmap_file->spte_list;
+  struct list_elem *spte_e;
+
+  for (spte_e = list_begin(spte_list); spte_e != list_end(spte_list);)
+  {
+    struct spt_entry *spte = list_entry(spte_e, struct spt_entry, mmap_elem);
+    
+    if(pagedir_is_dirty(&thread_current()->pagedir, spte->vaddr))
+    {
+      file_write_at(spte->file, spte->vaddr, spte->read_bytes, spte->offset);
+    }
+
+    spte_e = list_remove(spte_e);
+    delete_spte(&thread_current()->spt, spte); 
+  }
+
+  file_close(mmap_file->file);
+  free(mmap_file);
 }
 
 

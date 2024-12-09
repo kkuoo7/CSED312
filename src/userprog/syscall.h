@@ -24,7 +24,7 @@ void sys_seek(int fd, unsigned position);
 unsigned sys_tell(int fd);
 void sys_close(int fd);
 int sys_mmap(int fd, void *addr);
-void sys_munmap(int mapid);
+void sys_munmap(int mapping);
 
 /* Helper functions */
 void get_argument(void *esp, int *arg, int count);

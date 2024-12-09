@@ -117,6 +117,8 @@ struct thread
 #endif
 
    struct hash spt;
+   int next_mapid;
+   struct list mmap_list;
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
