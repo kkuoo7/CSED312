@@ -161,7 +161,6 @@ syscall_handler (struct intr_frame *f)
 
     case SYS_WRITE:
       get_argument (f->esp, arg, 3);
-
       check_valid_buffer(arg[1], arg[2], false);
       f->eax = sys_write ((int) arg[0], (const void *) arg[1], (unsigned int) arg[2]);
       break;
@@ -180,6 +179,17 @@ syscall_handler (struct intr_frame *f)
       get_argument (f->esp, arg, 1);
       sys_close (arg[0]);
       break;
+
+    case SYS_MMAP:
+      get_argument(f->esp, arg, 2);
+      // check_address(arg[1]);
+      f->eax = sys_mmap((int) arg[0], (void *) arg[1]);
+      break;
+
+    case SYS_MUNMAP:
+      get_argument(f->esp, arg, 1);
+      sys_munmap((int) arg[0]);
+      break;    
   }
 }
 
@@ -377,3 +387,102 @@ sys_close (int fd)
 
   lock_release(&filesys_lock);
 }
+
+/*fd: 프로세스의 가상 주소공간에 매핑할 파일
+addr: 매핑을 시작할 주소(page 단위 정렬)
+성공 시 mapping id를 리턴, 실패 시 에러코드(-1) 리턴
+요구페이징에 의해 파일 데이터를 메모리로 로드*/
+int 
+sys_mmap (int fd, void *addr)
+{
+
+  if (pg_ofs (addr) != 0 || !addr)
+    return -1;
+  if (is_user_vaddr (addr) == false)
+    return -1;
+
+  void * ptr;
+  for(ptr = addr; ptr < addr + sys_filesize(fd); ptr += PGSIZE) 
+  {
+	  if(find_spte(ptr)) 
+    {
+      return -1;
+    }
+  }
+
+  struct mmap_file *mmap_file;
+  struct file *file, *file_copy;
+
+  mmap_file = (struct mmap_file *)malloc(sizeof(struct mmap_file));
+  memset (mmap_file, 0, sizeof(struct mmap_file));
+  list_init (&mmap_file->spte_list);
+  
+  file = process_get_file(fd);
+  file_copy = file_reopen(file); 
+
+  mmap_file->file = file_copy;
+  mmap_file->mapid = thread_current()->next_mapid++;
+
+  list_push_back(&thread_current()->mmap_list, &mmap_file->elem);
+
+  int length = file_length(mmap_file->file);
+  int offset = 0;
+
+  struct spt_entry *spte; 
+  while (length > 0)
+  {
+    spte = (struct spt_entry *) malloc(sizeof(struct spt_entry));
+
+    spte->type = VM_FILE;
+    spte->is_loaded = false;
+    spte->writable = true;
+    spte->vaddr = addr;
+    spte->offset = offset; // offset은 파일 내부 데이터 참조를 위한 디스크 상에서의 상대적 주소 
+    spte->read_bytes = (length > PGSIZE) ? PGSIZE : length;
+    spte->zero_bytes = PGSIZE - spte->read_bytes;
+    spte->file = mmap_file->file;
+
+    list_push_back(&mmap_file->spte_list, &spte->mmap_elem);
+    insert_spte(&thread_current()->spt, spte);
+
+    length -= PGSIZE;
+    addr += PGSIZE;
+    offset += PGSIZE;
+  }
+
+  return mmap_file->mapid;
+}
+
+
+/* mmap_list내에서 mapping에 해당하는 mapid를 갖는 모든 vm_entry을
+해제
+인자로 넘겨진 mapping 값이 CLOSE_ALL인, 경우 모든 파일 매핑을 제거
+매핑 제거 시 do_munmap()함수 호출 */
+void 
+sys_munmap(int mapping) // consider CLOSE_ALL 
+{
+  // mmap_list 순회 
+    // mapid match 검사 
+    // vm_entry 제거 
+    // mmap_file 제거 
+    // file_close 
+  // process_exit 수정
+
+  struct list *mmap_list = &thread_current()->mmap_list;
+  struct mmap_file *mmf;
+  struct list_elem *e;
+
+  for (e = list_begin(mmap_list); e != list_end(mmap_list); e = list_next(mmap_list))
+  {
+    mmf = list_entry(e, struct mmap_file, elem);
+
+    if (mmf->mapid == mapping)
+    {
+      e = list_remove(e);
+      do_unmap(mmf);
+      break;
+    }
+  }
+}
+
+

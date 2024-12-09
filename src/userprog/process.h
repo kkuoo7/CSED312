@@ -41,6 +41,7 @@ void process_close_file (int fd);
 
 bool handle_mm_fault(struct spt_entry *spte);
 bool load_page (struct hash *spt, void *upage);
+void do_unmap(struct mmap_file *);
 
 bool install_page (void *upage, void *kpage, bool writable);
 
