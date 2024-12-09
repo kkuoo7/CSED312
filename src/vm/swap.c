@@ -23,10 +23,11 @@ swap_init ()
 
 
 void swap_in(struct spt_entry *spte, void *kaddr)
-{
+{   
+    
     int i;
     int id = spte->swap_slot;
-
+    printf("swap_in called\n");
     lock_acquire(&swap_lock);
     {
         if (id > bitmap_size(swap_bitmap) || id < 0)
@@ -55,7 +56,7 @@ size_t swap_out(void *kaddr)
 {
     int i;
     int id;
-
+    printf("swap_out called\n");
     lock_acquire(&swap_lock);
     {
         id = bitmap_scan_and_flip(swap_bitmap, 0, 1, true);
