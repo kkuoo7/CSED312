@@ -19,6 +19,7 @@
 #include "threads/vaddr.h"
 #include "syscall.h"
 #include "vm/page.h"
+#include "vm/frame.h"
 
 #define FD_MAX 64
 
@@ -464,26 +465,27 @@ process_close_file (int fd)
   }
 }
 
-bool handle_mm_fault(struct spt_entry *spte)
+bool handle_mm_fault(struct spt_entry *_spte)
 {
+  struct frame *f;
   uint8_t *kpage;
   
-  switch (spte->type)
+  switch (_spte->type)
   {
     case VM_BIN: 
     case VM_FILE:
-      kpage = palloc_get_page(PAL_USER);
-      if (kpage == NULL)
-        return false; 
-     
-      if (!load_file(kpage, spte) || !install_page(spte->vaddr, kpage, spte->writable))
+      f = falloc(PAL_USER);
+      if (f == NULL) return false; 
+      f->spte = _spte;
+      kpage = f->kaddr;
+      if (!load_file(kpage, _spte) || !install_page(_spte->vaddr, kpage, _spte->writable))
       {
-          palloc_free_page(kpage);
+          ffree(kpage);
           return false;
       }
 
-      spte->is_loaded = true;
-      spte->kpage = kpage;  // 여기서 kpage를 spte에 저장!
+      f->spte->is_loaded = true;
+      f->spte->kpage = kpage;  // 여기서 kpage를 spte에 저장!
       return true;
     
     default: 
@@ -794,41 +796,38 @@ setup_stack (void **esp)
 {
   bool success = false;
   void *upage = ((uint8_t *) PHYS_BASE) - PGSIZE;
-  void *kpage = palloc_get_page(PAL_USER | PAL_ZERO);
-
-  if (kpage == NULL) {
-    return false;
-  }
+  struct frame* f = falloc(PAL_USER | PAL_ZERO);
+  if (f == NULL) return false;
+  void *kpage = f->kaddr;
 
   success = install_page(upage, kpage, true);
   if (success)
   {
-    struct spt_entry *spte;
-    spte = (struct spt_entry *)malloc(sizeof(struct spt_entry));
+    f->spte = (struct spt_entry *)malloc(sizeof(struct spt_entry));
     
-    if (spte == NULL)
+    if (f->spte == NULL)
     {
       success = false;
-      palloc_free_page(kpage);
+      ffree(kpage);
     }
     else 
     {
       *esp = PHYS_BASE;
 
-      memset(spte, 0, sizeof(struct spt_entry));
-      spte->type = VM_ANON;
-      spte->vaddr = upage;
-      spte->writable = true;
-      spte->is_loaded = true;
-      spte->kpage = kpage;  // 여기서 kpage를 spte에 저장!
+      memset(f->spte, 0, sizeof(struct spt_entry));
+      f->spte->type = VM_ANON;
+      f->spte->vaddr = upage;
+      f->spte->writable = true;
+      f->spte->is_loaded = true;
+      f->spte->kpage = kpage;  // 여기서 kpage를 spte에 저장!
 
-      insert_spte(&thread_current()->spt, spte);
+      insert_spte(&thread_current()->spt, f->spte);
 
     }
   }
   else 
   {
-    palloc_free_page(kpage);
+    ffree(kpage);
   }
 
   return success;

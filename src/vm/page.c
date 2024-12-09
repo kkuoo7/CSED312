@@ -8,8 +8,6 @@
 #include "threads/interrupt.h"
 #include "lib/kernel/hash.h"
 
-extern struct list lru_list;
-
 static unsigned spt_hash_func (const struct hash_elem *, void * UNUSED);
 static bool spt_less_func (const struct hash_elem *, const struct hash_elem *, void * UNUSED);
 static void spt_destroy_func (struct hash_elem *, void * UNUSED);
@@ -141,12 +139,7 @@ bool load_file(void *kaddr, struct spt_entry *spte)
 // {
 
 // }
-
-// struct page * alloc_page (enum palloc_flags flags)
-// {
-
-// }
-
+/*
 void free_page_vaddr(void *vaddr)
 {
     free_page_kaddr(pagedir_get_page(thread_current()->pagedir, vaddr));
@@ -163,6 +156,6 @@ void __free_page (struct page *page)
 
 }
 
-
+*/
 
 

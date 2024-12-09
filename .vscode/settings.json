@@ -5,6 +5,12 @@
         "ide.h": "c",
         "ft.h": "c",
         "vaddr.h": "c",
-        "interrupt.h": "c"
+        "interrupt.h": "c",
+        "loader.h": "c",
+        "tests.h": "c",
+        "pagedir.h": "c",
+        "filesys.h": "c",
+        "palloc.h": "c",
+        "frame.h": "c"
     }
 }

@@ -5,21 +5,12 @@
 #include <hash.h> 
 #include "threads/palloc.h"
 
-extern struct lock lru_list_lock;
 
 enum vm_type
 {
     VM_ANON,
     VM_FILE,
     VM_BIN
-};
-
-struct page
-{
-    void *kaddr;
-    struct spt_entry *spte;
-    struct thread *thread;
-    struct list_elem lru;
 };
 
 struct mmap_file
@@ -58,10 +49,5 @@ bool insert_spte(struct hash *, struct spt_entry *);
 bool delete_spte(struct hash *, struct spt_entry *);
 
 bool load_file (void *kaddr, struct spt_entry *);
-
-struct page *alloc_page(enum palloc_flags);
-void free_page(void *);
-void free_page_thread (struct thread *);
-void __free_page(struct page *);
 
 #endif /* VM_PAGE_H */
