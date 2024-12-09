@@ -8,18 +8,12 @@ struct frame
     struct list_elem lru;
 };
 
-static struct list lru_list;
-static struct lock lru_list_lock;
-
 struct frame *falloc(enum palloc_flags);
 void ffree(void *);
 //void free_frame_thread (struct thread *);
-//void __free_frame(struct frame *);s
-
+//void __free_frame(struct frame *);
 
 void lru_list_init(void);
-//oid add_page_to_lru_list(struct page *);
-//struct page *find_page_from_lru_list(void *);
-//void del_page_from_lru_list (struct page *);
 
 //struct page *get_victim (void);
+void* try_to_free_pages (enum palloc_flags flags);

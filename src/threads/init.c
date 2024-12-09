@@ -129,6 +129,7 @@ main (void)
 #endif
 
   lru_list_init();
+  swap_init ();
 
   printf ("Boot complete.\n");
   

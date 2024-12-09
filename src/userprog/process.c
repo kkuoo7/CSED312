@@ -20,6 +20,7 @@
 #include "syscall.h"
 #include "vm/page.h"
 #include "vm/frame.h"
+#include "vm/swap.h"
 
 #define FD_MAX 64
 
@@ -485,9 +486,14 @@ bool handle_mm_fault(struct spt_entry *_spte)
       }
 
       f->spte->is_loaded = true;
-      f->spte->kpage = kpage;  // 여기서 kpage를 spte에 저장!
+      f->spte->kpage = kpage; 
       return true;
-    
+    case VM_ANON:
+    f = falloc(PAL_USER);
+    if (f == NULL) return false; 
+    f->spte = _spte;
+    kpage = f->kaddr;
+    swap_in(_spte, kpage);
     default: 
       return false;
   }
@@ -819,7 +825,7 @@ setup_stack (void **esp)
       f->spte->vaddr = upage;
       f->spte->writable = true;
       f->spte->is_loaded = true;
-      f->spte->kpage = kpage;  // 여기서 kpage를 spte에 저장!
+      f->spte->kpage = kpage;
 
       insert_spte(&thread_current()->spt, f->spte);
 
